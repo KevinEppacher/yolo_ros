@@ -21,7 +21,7 @@ setup(
     entry_points={
         'console_scripts': [
             'yolo_ros = yolo_ros.yolo_wrapper:main',
-            'test_yoloe_service = yolo_ros.test.test_yoloe_service:main',
+            'image_publisher = yolo_ros.test.image_publisher:main',
         ],
     },
 )
