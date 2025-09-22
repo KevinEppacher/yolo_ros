@@ -12,6 +12,15 @@
   <test_depend>ament_pep257</test_depend>
   <test_depend>python3-pytest</test_depend>
 
+  <build_depend>sensor_msgs</build_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+
+  <build_depend>vision_msgs</build_depend>
+  <exec_depend>vision_msgs</exec_depend>
+
+  <build_depend>vlm_base</build_depend>
+  <exec_depend>vlm_base</exec_depend>
+
   <export>
     <build_type>ament_python</build_type>
   </export>
