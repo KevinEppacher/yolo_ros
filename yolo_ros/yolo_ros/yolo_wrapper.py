@@ -136,8 +136,8 @@ class YoloWrapper(LifecycleNode):
             if self.publish_detections:
                 self.pub_det = self.create_publisher(Detection2DArray, "yoloe/detections", self.qos_rel)
             if self.publish_score_mask:
-                self.pub_score_mask_32f = self.create_publisher(Image, "yoloe/score_mask_32f", self.qos_rel)
-                self.pub_score_mask_mono8 = self.create_publisher(Image, "yoloe/score_mask_mono8", self.qos_rel)
+                self.pub_score_mask_32f = self.create_publisher(Image, "yoloe/score_mask_raw", self.qos_rel)
+                self.pub_score_mask_mono8 = self.create_publisher(Image, "yoloe/score_mask_debug", self.qos_rel)
 
             self.get_logger().info("Configured.")
             return TransitionCallbackReturn.SUCCESS

@@ -27,6 +27,18 @@ def generate_launch_description():
         ]
     )
 
+    semantic_pcl_publisher = Node(
+        package='yolo_ros',
+        executable='yolo_semantic_pointcloud',
+        name='yolo_semantic_pointcloud',
+        output='screen',
+        namespace='yolo_ros',
+        parameters=[
+            {'use_sim_time': True},
+            yoloe_config_path
+        ]
+    )
+
 
     ld = LaunchDescription()
     ld.add_action(yoloe_node)

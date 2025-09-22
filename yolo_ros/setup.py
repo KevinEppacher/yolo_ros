@@ -27,6 +27,7 @@ setup(
         'console_scripts': [
             'yolo_ros = yolo_ros.yolo_wrapper:main',
             'image_publisher = yolo_ros.test.image_publisher:main',
+            'yolo_semantic_pointcloud = yolo_ros.yolo_semantic_pointcloud:main',
         ],
     },
 )
