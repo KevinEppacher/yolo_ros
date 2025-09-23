@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
 # score_depth_to_pointcloud.py
-# In:  yoloe/score_mask_raw (Image, 32FC1 [0..1])
-#      /camera/depth/image_rect_raw (Image, 32FC1 [m] or 16UC1 [mm])
-#      /camera/depth/camera_info (CameraInfo)
-# Out: yoloe/score_cloud (PointCloud2) fields: x,y,z,intensity (float32)
 
 from __future__ import annotations
 import rclpy
@@ -15,20 +11,29 @@ from message_filters import Subscriber, ApproximateTimeSynchronizer
 from sensor_msgs_py import point_cloud2
 import numpy as np
 import cv2
+from builtin_interfaces.msg import Time
+from std_msgs.msg import Header
+
+FIELDS_XYZI = [
+    PointField(name='x', offset=0,  datatype=PointField.FLOAT32, count=1),
+    PointField(name='y', offset=4,  datatype=PointField.FLOAT32, count=1),
+    PointField(name='z', offset=8,  datatype=PointField.FLOAT32, count=1),
+    PointField(name='intensity', offset=12, datatype=PointField.FLOAT32, count=1),
+]
 
 class ScoreDepthToCloud(Node):
     def __init__(self):
         super().__init__("score_depth_to_cloud")
-        # Params
-        self.declare_parameter("score_topic", "yoloe/score_mask_raw")
-        self.declare_parameter("depth_topic", "/camera/depth/image_rect_raw")
-        self.declare_parameter("camera_info_topic", "/camera/depth/camera_info")
-        self.declare_parameter("cloud_topic", "yoloe/score_cloud")
-        self.declare_parameter("score_threshold", 0.0)   # keep everything by default
+        # params
+        self.declare_parameter("score_topic", "/yoloe/score_mask_raw")
+        self.declare_parameter("depth_topic", "/depth")
+        self.declare_parameter("camera_info_topic", "/camera_info")
+        self.declare_parameter("cloud_topic", "/yoloe/score_cloud")
+        self.declare_parameter("score_threshold", 0.01)
         self.declare_parameter("depth_min", 0.05)
         self.declare_parameter("depth_max", 10.0)
         self.declare_parameter("stride", 1)
-        self.declare_parameter("frame_id", "camera_depth_optical_frame")
+        self.declare_parameter("frame_id", "camera")
 
         p = self.get_parameter
         self.score_topic = p("score_topic").get_parameter_value().string_value
@@ -44,34 +49,33 @@ class ScoreDepthToCloud(Node):
         self.bridge = CvBridge()
         self.fx = self.fy = self.cx = self.cy = None
 
-        # QoS: use RELIABLE for score (publisher likely RELIABLE), BEST_EFFORT for depth
         qos_rel = QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE, history=HistoryPolicy.KEEP_LAST)
         qos_be  = QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT, history=HistoryPolicy.KEEP_LAST)
 
-        # Sync
         self.sub_score = Subscriber(self, Image, self.score_topic, qos_profile=qos_rel)
         self.sub_depth = Subscriber(self, Image, self.depth_topic, qos_profile=qos_be)
         self.sub_info  = Subscriber(self, CameraInfo, self.camera_info_topic, qos_profile=qos_rel)
+
         self.sync = ApproximateTimeSynchronizer([self.sub_score, self.sub_depth, self.sub_info],
                                                 queue_size=10, slop=0.08)
         self.sync.registerCallback(self.cb)
 
         self.pub_cloud = self.create_publisher(PointCloud2, self.cloud_topic, qos_rel)
 
-        self.get_logger().info(f"score={self.score_topic}, depth={self.depth_topic}, info={self.camera_info_topic} -> {self.cloud_topic}")
+        self.get_logger().info(
+            f"score={self.score_topic}, depth={self.depth_topic}, info={self.camera_info_topic} -> {self.cloud_topic}"
+        )
 
     def cb(self, score_msg: Image, depth_msg: Image, info_msg: CameraInfo):
-        # Intrinsics
-        if self.fx is None or info_msg.k:
-            self.fx, self.fy, self.cx, self.cy = info_msg.k[0], info_msg.k[4], info_msg.k[2], info_msg.k[5]
+        # intrinsics each time (cheap and safe)
+        self.fx, self.fy, self.cx, self.cy = info_msg.k[0], info_msg.k[4], info_msg.k[2], info_msg.k[5]
 
-        # Convert images
+        # convert
         try:
-            score = self.bridge.imgmsg_to_cv2(score_msg, desired_encoding="32FC1")  # [0..1]
+            score = self.bridge.imgmsg_to_cv2(score_msg, desired_encoding="32FC1")
         except Exception as e:
             self.get_logger().error(f"score cv_bridge: {e}")
             return
-
         try:
             if depth_msg.encoding == "16UC1":
                 depth = self.bridge.imgmsg_to_cv2(depth_msg, desired_encoding="16UC1").astype(np.float32) * 0.001
@@ -81,27 +85,20 @@ class ScoreDepthToCloud(Node):
             self.get_logger().error(f"depth cv_bridge: {e}")
             return
 
-        # Match sizes
         if score.shape[:2] != depth.shape[:2]:
             score = cv2.resize(score, (depth.shape[1], depth.shape[0]), interpolation=cv2.INTER_NEAREST)
 
-        H, W = depth.shape
-        # Valid mask
-        valid = np.isfinite(depth) & (depth > self.depth_min) & (depth < self.depth_max) & (score >= self.score_threshold)
+        valid = (
+            np.isfinite(depth)
+            & (depth > self.depth_min) & (depth < self.depth_max)
+            & (score >= self.score_threshold)
+        )
+
         if not np.any(valid):
-            # publish empty cloud
-            empty = point_cloud2.create_cloud(
-                self._hdr(depth_msg), [
-                    PointField('x', 0,  PointField.FLOAT32, 1),
-                    PointField('y', 4,  PointField.FLOAT32, 1),
-                    PointField('z', 8,  PointField.FLOAT32, 1),
-                    PointField('intensity', 12, PointField.FLOAT32, 1)
-                ], []
-            )
-            self.pub_cloud.publish(empty)
+            cloud = point_cloud2.create_cloud(self._header(depth_msg.header.stamp), FIELDS_XYZI, [])
+            self.pub_cloud.publish(cloud)
             return
 
-        # Subsample by stride
         ys, xs = np.where(valid)
         if self.stride > 1:
             ys = ys[::self.stride]
@@ -110,41 +107,31 @@ class ScoreDepthToCloud(Node):
         z = depth[ys, xs]
         s = score[ys, xs]
 
-        # Backproject
         x = (xs.astype(np.float32) - self.cx) / self.fx * z
         y = (ys.astype(np.float32) - self.cy) / self.fy * z
 
-        # Pack xyz+i
         data = np.column_stack((x.astype(np.float32), y.astype(np.float32), z.astype(np.float32), s.astype(np.float32)))
         pts_iter = (tuple(row) for row in data)
 
-        cloud = point_cloud2.create_cloud(
-            self._hdr(depth_msg), [
-                PointField('x', 0,  PointField.FLOAT32, 1),
-                PointField('y', 4,  PointField.FLOAT32, 1),
-                PointField('z', 8,  PointField.FLOAT32, 1),
-                PointField('intensity', 12, PointField.FLOAT32, 1)
-            ],
-            pts_iter
-        )
+        cloud = point_cloud2.create_cloud(self._header(depth_msg.header.stamp), FIELDS_XYZI, pts_iter)
         self.pub_cloud.publish(cloud)
 
-    def _hdr(self, src_msg) -> PointCloud2:
-        hdr = PointCloud2()
-        hdr.header.stamp = src_msg.header.stamp
-        hdr.header.frame_id = self.frame_id
-        return hdr
+    def _header(self, stamp: Time) -> Header:
+        h = Header()
+        h.stamp = stamp
+        h.frame_id = self.frame_id
+        return h
 
 def main():
     rclpy.init()
     node = ScoreDepthToCloud()
     try:
-        rclpy.spin(node)
+            rclpy.spin(node)
     except KeyboardInterrupt:
-        pass
+            pass
     finally:
-        node.destroy_node()
-        rclpy.shutdown()
+            node.destroy_node()
+            rclpy.shutdown()
 
 if __name__ == "__main__":
     main()
