@@ -63,6 +63,7 @@ class YoloWrapper(LifecycleNode):
         self.pub_det = None
         self.pub_score_mask_32f = None
         self.pub_score_mask_mono8 = None
+        self.pub_instance_id = None
 
         self._declare_params()
         self._init_param_cache()
@@ -83,6 +84,7 @@ class YoloWrapper(LifecycleNode):
         self.declare_parameter("publish_overlay", True)
         self.declare_parameter("publish_detections", True)
         self.declare_parameter("publish_score_mask", True)
+        self.declare_parameter("publish_instance_mask", True)
 
         # prompt subscriber
         self.declare_parameter("prompt_topic", "/user_prompt")
@@ -102,6 +104,7 @@ class YoloWrapper(LifecycleNode):
         self.prompt_topic = "/user_prompt"
         self.prompt_delim = ","
         self.publish_score_mask = True
+        self.publish_instance_mask = True
 
     def _read_params(self):
         p = self.get_parameter
@@ -119,6 +122,7 @@ class YoloWrapper(LifecycleNode):
         self.prompt_topic = p("prompt_topic").get_parameter_value().string_value
         self.prompt_delim = p("prompt_delimiter").get_parameter_value().string_value or ","
         self.publish_score_mask = bool(p("publish_score_mask").value)
+        self.publish_instance_mask = bool(p("publish_instance_mask").value)
 
     # ---- lifecycle ----
     def on_configure(self, state: State) -> TransitionCallbackReturn:
@@ -138,6 +142,8 @@ class YoloWrapper(LifecycleNode):
             if self.publish_score_mask:
                 self.pub_score_mask_32f = self.create_publisher(Image, "yoloe/score_mask_raw", self.qos_rel)
                 self.pub_score_mask_mono8 = self.create_publisher(Image, "yoloe/score_mask_debug", self.qos_rel)
+            if self.publish_instance_mask:
+                self.pub_instance_id = self.create_publisher(Image, "yoloe/instance_id_mask", self.qos_rel)
 
             self.get_logger().info("Configured.")
             return TransitionCallbackReturn.SUCCESS
@@ -160,9 +166,9 @@ class YoloWrapper(LifecycleNode):
             for s in (self.sub_rgb, self.sub_prompt):
                 if s: self.destroy_subscription(s)
             self.sub_rgb = self.sub_prompt = None
-            for p in (self.pub_overlay, self.pub_det, self.pub_score_mask_32f, self.pub_score_mask_mono8):
+            for p in (self.pub_overlay, self.pub_det, self.pub_score_mask_32f, self.pub_score_mask_mono8, self.pub_instance_id):
                 if p: self.destroy_publisher(p)
-            self.pub_overlay = self.pub_det = self.pub_score_mask_32f = self.pub_score_mask_mono8 = None
+            self.pub_overlay = self.pub_det = self.pub_score_mask_32f = self.pub_score_mask_mono8 = self.pub_instance_id = None
             self.get_logger().info("Deactivated.")
             return TransitionCallbackReturn.SUCCESS
         except Exception:
@@ -223,18 +229,22 @@ class YoloWrapper(LifecycleNode):
         
         if self.publish_score_mask and (self.pub_score_mask_32f or self.pub_score_mask_mono8):
             h, w = frame.shape[:2]
-            score_map = self._build_score_mask(res, h, w)  # float32 in [0,1]
+            score_map, id_mask = self._build_score_and_id(res, h, w)
 
+        # publish score masks
+        if self.publish_score_mask and (self.pub_score_mask_32f or self.pub_score_mask_mono8):
             if self.pub_score_mask_32f:
-                msg32 = self.bridge.cv2_to_imgmsg(score_map, encoding="32FC1")
-                msg32.header = msg.header
+                msg32 = self.bridge.cv2_to_imgmsg(score_map, encoding="32FC1"); msg32.header = msg.header
                 self.pub_score_mask_32f.publish(msg32)
-
             if self.pub_score_mask_mono8:
                 mono = (score_map * 255.0).astype(np.uint8)
-                msg8 = self.bridge.cv2_to_imgmsg(mono, encoding="mono8")
-                msg8.header = msg.header
+                msg8 = self.bridge.cv2_to_imgmsg(mono, encoding="mono8"); msg8.header = msg.header
                 self.pub_score_mask_mono8.publish(msg8)
+
+        # publish instance-id mask
+        if self.publish_instance_mask and self.pub_instance_id:
+            msg_id = self.bridge.cv2_to_imgmsg(id_mask, encoding="16UC1"); msg_id.header = msg.header
+            self.pub_instance_id.publish(msg_id)
 
         if self.pub_overlay:
             overlay = res.plot()
@@ -277,50 +287,47 @@ class YoloWrapper(LifecycleNode):
             self.pub_det.publish(det_arr)
 
             # --- helper: put near other helpers ---
-    def _build_score_mask(self, res, h: int, w: int) -> np.ndarray:
+
+    def _build_score_and_id(self, res, h: int, w: int):
         """
-        Build a per-pixel confidence map in [0,1] with the maximum score over all instances.
-        Returns float32 HxW.
+        Returns:
+        score_map: float32 HxW in [0,1]
+        id_mask:   uint16  HxW, 0=background, 1..N instance index
+        Rule: per pixel pick the instance with the highest detection confidence.
         """
         score_map = np.zeros((h, w), dtype=np.float32)
-
-        # If no instance masks, return zeros
+        id_mask   = np.zeros((h, w), dtype=np.uint16)
         if getattr(res, "masks", None) is None or res.masks.data is None:
-            return score_map
-
-        # Ultralytics masks: (N,Hm,Wm) torch tensor. Resize to (h,w) per instance.
-        masks = res.masks.data  # torch.Tensor
+            return score_map, id_mask
         boxes = res.boxes
+        masks = res.masks.data
         if boxes is None or len(boxes) == 0:
-            return score_map
+            return score_map, id_mask
 
-        mnp = masks.detach().cpu().numpy()  # shape: (N,Hm,Wm)
-        # Guard for size mismatch; resize with nearest to keep mask crisp.
+        # keep current best conf per pixel to break overlaps
+        best_conf = np.zeros((h, w), dtype=np.float32)
+
+        mnp = masks.detach().cpu().numpy()  # (N,Hm,Wm)
         for i in range(mnp.shape[0]):
-            raw = mnp[i]  # float mask in [0,1]
-            if raw.shape[0] != h or raw.shape[1] != w:
-                m_resized = cv2.resize(raw, (w, h), interpolation=cv2.INTER_NEAREST)
-            else:
-                m_resized = raw
-            # Binary support; threshold at 0.5
-            m_bin = (m_resized >= 0.5).astype(np.float32)
+            raw = mnp[i]
+            m_resized = raw if raw.shape == (h, w) else cv2.resize(raw, (w, h), interpolation=cv2.INTER_NEAREST)
+            m_bin = (m_resized >= 0.5)
 
-            # Confidence for this instance
             try:
                 conf = float(boxes.conf[i].item())
             except Exception:
                 conf = 0.0
+            if conf <= 0.0:
+                continue
 
-            # Max-pool scores over overlaps
-            if conf > 0.0:
-                # Equivalent to: score_map = np.maximum(score_map, m_bin * conf)
-                np.maximum(score_map, m_bin * conf, out=score_map)
+            # update where this instance beats the current best
+            upd = m_bin & (conf > best_conf)
+            if np.any(upd):
+                score_map[upd] = conf
+                id_mask[upd] = np.uint16(i + 1)  # 1-based instance id
+                best_conf[upd] = conf
 
-        # Clamp to [0,1] just in case of numerical noise
-        np.clip(score_map, 0.0, 1.0, out=score_map)
-        return score_map
-
-
+        return score_map, id_mask
 
 def main():
     rclpy.init()
