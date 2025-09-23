@@ -22,9 +22,9 @@ FIELDS_XYZI_ID = [
     PointField(name='instance',  offset=16, datatype=PointField.UINT16,  count=1),
 ]
 
-class ScoreDepthToCloud(Node):
+class SemanticPointCloud(Node):
     def __init__(self):
-        super().__init__("score_depth_to_cloud")
+        super().__init__("semantic_pointcloud")
         # params
         self.declare_parameter("score_topic", "/yoloe/score_mask_raw")
         self.declare_parameter("id_topic", "/yoloe/instance_id_mask")
@@ -136,7 +136,7 @@ class ScoreDepthToCloud(Node):
 
 def main():
     rclpy.init()
-    node = ScoreDepthToCloud()
+    node = SemanticPointCloud()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:

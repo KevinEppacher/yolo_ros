@@ -1,45 +1,51 @@
 #!/usr/bin/env python3
 import os
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription, TimerAction
-from launch.launch_description_sources import PythonLaunchDescriptionSource
-from ament_index_python.packages import get_package_share_directory
 from launch_ros.actions import Node
+from ament_index_python.packages import get_package_share_directory
 
 def generate_launch_description():
-    pkg_name = 'mpc_local_planner'
+    pkg_name = 'yolo_ros'
 
+    # config files
     yoloe_config_path = os.path.join(
         get_package_share_directory(pkg_name),
         'config',
         'yoloe_config.yaml'
     )
+    semantic_pcl_config_path = os.path.join(
+        get_package_share_directory(pkg_name),
+        'config',
+        'semantic_pointcloud.yaml'
+    )
 
+    # YOLOE lifecycle node
     yoloe_node = Node(
         package='yolo_ros',
-        executable='yoloe_lifecycle_node',
-        name='yoloe_node',
+        executable='yolo_ros',          # matches entry point in setup.py
+        name='yolo_wrapper',
+        namespace='yoloe',
         output='screen',
-        namespace='yolo_ros',
         parameters=[
             {'use_sim_time': True},
             yoloe_config_path
         ]
     )
 
-    semantic_pcl_publisher = Node(
+    # Semantic pointcloud node
+    semantic_pcl_node = Node(
         package='yolo_ros',
-        executable='yolo_semantic_pointcloud',
-        name='yolo_semantic_pointcloud',
+        executable='yolo_semantic_pointcloud',  # matches entry point in setup.py
+        name='semantic_pointcloud',
+        namespace='yoloe',
         output='screen',
-        namespace='yolo_ros',
         parameters=[
             {'use_sim_time': True},
-            yoloe_config_path
+            semantic_pcl_config_path
         ]
     )
-
 
     ld = LaunchDescription()
     ld.add_action(yoloe_node)
+    ld.add_action(semantic_pcl_node)
     return ld

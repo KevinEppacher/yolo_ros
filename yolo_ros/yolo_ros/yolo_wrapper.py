@@ -77,7 +77,7 @@ class YoloWrapper(LifecycleNode):
         self.declare_parameter("backend", "yoloe")
         self.declare_parameter("weights", "yoloe-11l-seg.pt")
         self.declare_parameter("download_url", "")
-        self.declare_parameter("prompts", ["oven", "chair", "tv", "bed", "door"])
+        self.declare_parameter("prompts", [""])
         self.declare_parameter("imgsz", 640)
         self.declare_parameter("conf", 0.25)
         self.declare_parameter("iou", 0.50)
@@ -136,14 +136,14 @@ class YoloWrapper(LifecycleNode):
                 self._apply_prompts(self.prompts)
 
             if self.publish_overlay:
-                self.pub_overlay = self.create_publisher(Image, "yoloe/overlay", self.qos_rel)
+                self.pub_overlay = self.create_publisher(Image, "overlay", self.qos_rel)
             if self.publish_detections:
-                self.pub_det = self.create_publisher(Detection2DArray, "yoloe/detections", self.qos_rel)
+                self.pub_det = self.create_publisher(Detection2DArray, "detections", self.qos_rel)
             if self.publish_score_mask:
-                self.pub_score_mask_32f = self.create_publisher(Image, "yoloe/score_mask_raw", self.qos_rel)
-                self.pub_score_mask_mono8 = self.create_publisher(Image, "yoloe/score_mask_debug", self.qos_rel)
+                self.pub_score_mask_32f = self.create_publisher(Image, "score_mask_raw", self.qos_rel)
+                self.pub_score_mask_mono8 = self.create_publisher(Image, "score_mask_debug", self.qos_rel)
             if self.publish_instance_mask:
-                self.pub_instance_id = self.create_publisher(Image, "yoloe/instance_id_mask", self.qos_rel)
+                self.pub_instance_id = self.create_publisher(Image, "instance_id_mask", self.qos_rel)
 
             self.get_logger().info("Configured.")
             return TransitionCallbackReturn.SUCCESS

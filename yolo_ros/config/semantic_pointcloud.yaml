@@ -1,0 +1,18 @@
+yoloe:
+  semantic_pointcloud:
+    ros__parameters:
+      # Input topics
+      score_topic: "/yoloe/score_mask_raw"      # Image (32FC1), values in [0,1]
+      id_topic: "/yoloe/instance_id_mask"       # Image (16UC1), instance labels
+      depth_topic: "/depth"                     # Depth image (16UC1 mm or 32FC1 m)
+      camera_info_topic: "/camera_info"         # Camera intrinsics
+
+      # Output topic
+      cloud_topic: "/yoloe/score_cloud"         # PointCloud2 with x,y,z,intensity,instance
+
+      # Processing parameters
+      score_threshold: 0.01     # ignore low scores
+      depth_min: 0.05           # meters
+      depth_max: 10.0           # meters
+      stride: 1                 # subsample pixels (1=no skip, 2=every 2nd, etc.)
+      frame_id: "camera"        # frame for PointCloud2 header

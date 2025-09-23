@@ -1,0 +1,26 @@
+yoloe:
+  yoloe_node:
+    ros__parameters:
+      # --- I/O topics ---
+      rgb_topic: "/rgb"                 # camera image topic (sensor_msgs/Image)
+      prompt_topic: "/user_prompt"      # multimodal_query_msgs/SemanticPrompt (uses text_query only)
+      prompt_delimiter: ","             # split phrases by comma, e.g. "black chair, pink hat"
+
+      # --- Model selection ---
+      backend: "yoloe"                  # kept for flexibility; used to build local model path
+      weights: "yoloe-11l-seg.pt"       # filename or absolute path
+      download_url: ""                  # optional http(s) url; leave empty if weights are local
+
+      # Initial class prompts (can be updated at runtime via /user_prompt)
+      prompts: ["person", "chair", "bottle"]
+
+      # --- Inference ---
+      imgsz: 640                        # inference resolution
+      conf: 0.25                        # confidence threshold
+      iou: 0.50                         # NMS IoU threshold
+
+      # --- Publishers toggles ---
+      publish_overlay: true             # publishes Image on "overlay"
+      publish_detections: true          # publishes Detection2DArray on "detections"
+      publish_score_mask: true          # publishes 32FC1 "score_mask_raw" and mono8 "score_mask_debug"
+      publish_instance_mask: true       # publishes 16UC1 "instance_id_mask"
