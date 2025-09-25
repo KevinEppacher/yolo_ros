@@ -18,8 +18,8 @@
   <build_depend>vision_msgs</build_depend>
   <exec_depend>vision_msgs</exec_depend>
 
-  <build_depend>vlm_base</build_depend>
-  <exec_depend>vlm_base</exec_depend>
+  <build_depend>multimodal_query_msgs</build_depend>
+  <exec_depend>multimodal_query_msgs</exec_depend>
 
   <export>
     <build_type>ament_python</build_type>

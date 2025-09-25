@@ -30,7 +30,7 @@ class SemanticPointCloud(Node):
         self.declare_parameter("id_topic", "/yoloe/instance_id_mask")
         self.declare_parameter("depth_topic", "/depth")
         self.declare_parameter("camera_info_topic", "/camera_info")
-        self.declare_parameter("cloud_topic", "/yoloe/score_cloud")
+        self.declare_parameter("cloud_topic", "/yoloe/semantic_pointcloud_xyzi")
         self.declare_parameter("score_threshold", 0.01)
         self.declare_parameter("depth_min", 0.05)
         self.declare_parameter("depth_max", 10.0)

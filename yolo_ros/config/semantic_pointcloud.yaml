@@ -8,7 +8,7 @@ yoloe:
       camera_info_topic: "/camera_info"         # Camera intrinsics
 
       # Output topic
-      cloud_topic: "/yoloe/score_cloud"         # PointCloud2 with x,y,z,intensity,instance
+      cloud_topic: "/yoloe/semantic_pointcloud_xyzi"         # PointCloud2 with x,y,z,intensity,instance
 
       # Processing parameters
       score_threshold: 0.01     # ignore low scores
