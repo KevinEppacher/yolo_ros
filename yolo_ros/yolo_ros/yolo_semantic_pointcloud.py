@@ -77,6 +77,11 @@ class SemanticPointCloud(Node):
         # intrinsics
         self.fx, self.fy, self.cx, self.cy = info_msg.k[0], info_msg.k[4], info_msg.k[2], info_msg.k[5]
 
+        self.get_logger().debug(f"cb: score {score_msg.height}x{score_msg.width} {score_msg.encoding}, "
+                                f"id {id_msg.height}x{id_msg.width} {id_msg.encoding}, "
+                                f"depth {depth_msg.height}x{depth_msg.width} {depth_msg.encoding}, "
+                                f"info {info_msg.width}x{info_msg.height}")
+
         # convert score + id + depth
         try:
             score = self.bridge.imgmsg_to_cv2(score_msg, desired_encoding="32FC1")  # [0,1]

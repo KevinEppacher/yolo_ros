@@ -26,6 +26,7 @@ def generate_launch_description():
         name='yolo_wrapper',
         namespace='yoloe',
         output='screen',
+        emulate_tty=True,
         parameters=[
             {'use_sim_time': True},
             yoloe_config_path
@@ -39,6 +40,8 @@ def generate_launch_description():
         name='semantic_pointcloud',
         namespace='yoloe',
         output='screen',
+        # arguments=['--ros-args', '--log-level', 'debug'],
+        emulate_tty=True,
         parameters=[
             {'use_sim_time': True},
             semantic_pcl_config_path
