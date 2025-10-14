@@ -69,7 +69,7 @@ class YoloWrapper(LifecycleNode):
         self._declare_params()
         self._init_param_cache()
 
-        self.qos_cam = QoSProfile(depth=1, reliability=ReliabilityPolicy.BEST_EFFORT, history=HistoryPolicy.KEEP_LAST)
+        self.qos_be = QoSProfile(depth=1, reliability=ReliabilityPolicy.BEST_EFFORT, history=HistoryPolicy.KEEP_LAST)
         self.qos_rel = QoSProfile(depth=5, reliability=ReliabilityPolicy.RELIABLE, history=HistoryPolicy.KEEP_LAST)
 
     # ---- params ----
@@ -156,7 +156,7 @@ class YoloWrapper(LifecycleNode):
 
     def on_activate(self, state: State) -> TransitionCallbackReturn:
         try:
-            self.sub_rgb = self.create_subscription(Image, self.rgb_topic, self.on_image, self.qos_cam)
+            self.sub_rgb = self.create_subscription(Image, self.rgb_topic, self.on_image, self.qos_be)
             self.sub_prompt = self.create_subscription(SemanticPrompt, self.prompt_topic, self.on_prompt, self.qos_rel)
             self.get_logger().info(f"Activated. rgb={self.rgb_topic}, prompts={self.prompt_topic}")
             return TransitionCallbackReturn.SUCCESS
