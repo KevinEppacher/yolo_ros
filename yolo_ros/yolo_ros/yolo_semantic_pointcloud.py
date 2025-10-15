@@ -13,6 +13,8 @@ import numpy as np
 import cv2
 from builtin_interfaces.msg import Time
 from std_msgs.msg import Header
+from rclpy.callback_groups import ReentrantCallbackGroup
+from rclpy.executors import MultiThreadedExecutor
 
 FIELDS_XYZI_ID = [
     PointField(name='x',         offset=0,  datatype=PointField.FLOAT32, count=1),
@@ -52,18 +54,23 @@ class SemanticPointCloud(Node):
         self.bridge = CvBridge()
         self.fx = self.fy = self.cx = self.cy = None
 
+        self.cb_group = ReentrantCallbackGroup()
+
         qos_rel = QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE, history=HistoryPolicy.KEEP_LAST)
         qos_be  = QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT, history=HistoryPolicy.KEEP_LAST)
 
         # sync 4 topics: score, id, depth, info
-        self.sub_score = Subscriber(self, Image, self.score_topic, qos_profile=qos_rel)
-        self.sub_id    = Subscriber(self, Image, self.id_topic,    qos_profile=qos_rel)
+        # score/id are produced by YOLO node now as BEST_EFFORT -> use qos_be here
+        self.sub_score = Subscriber(self, Image, self.score_topic, qos_profile=qos_be)
+        self.sub_id    = Subscriber(self, Image, self.id_topic,    qos_profile=qos_be)
         self.sub_depth = Subscriber(self, Image, self.depth_topic, qos_profile=qos_be)
+        # camera_info can be reliable but it's small and rarely changes; keep RELIABLE or BE
         self.sub_info  = Subscriber(self, CameraInfo, self.camera_info_topic, qos_profile=qos_rel)
 
+        # increase slop a bit so the synchronizer tolerates small clock offsets
         self.sync = ApproximateTimeSynchronizer(
             [self.sub_score, self.sub_id, self.sub_depth, self.sub_info],
-            queue_size=10, slop=0.08
+            queue_size=10, slop=0.2
         )
         self.sync.registerCallback(self.cb)
 
@@ -143,12 +150,12 @@ def main():
     rclpy.init()
     node = SemanticPointCloud()
     try:
-        rclpy.spin(node)
+        executor = MultiThreadedExecutor(num_threads=4)
+        executor.add_node(node)
+        executor.spin()
     except KeyboardInterrupt:
         pass
     finally:
+        executor.shutdown()
         node.destroy_node()
         rclpy.shutdown()
-
-if __name__ == "__main__":
-    main()

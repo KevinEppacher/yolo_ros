@@ -12,6 +12,8 @@ import rclpy
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 from rclpy.lifecycle import LifecycleNode, TransitionCallbackReturn, State
 from rcl_interfaces.msg import SetParametersResult
+from rclpy.callback_groups import ReentrantCallbackGroup
+from rclpy.executors import MultiThreadedExecutor
 
 from sensor_msgs.msg import Image
 from vision_msgs.msg import Detection2DArray, Detection2D, ObjectHypothesisWithPose, BoundingBox2D
@@ -137,15 +139,15 @@ class YoloWrapper(LifecycleNode):
                 self._apply_prompts(self.prompts)
 
             if self.publish_overlay:
-                self.pub_overlay = self.create_publisher(Image, "overlay", self.qos_rel)
+                self.pub_overlay = self.create_publisher(Image, "overlay", self.qos_be)
             if self.publish_detections:
-                self.pub_det = self.create_publisher(Detection2DArray, "detections", self.qos_rel)
+                self.pub_det = self.create_publisher(Detection2DArray, "detections", self.qos_be)
+            # score/instance masks should be sensor data -> best-effort
             if self.publish_score_mask:
-                self.pub_score_mask_32f = self.create_publisher(Image, "score_mask_raw", self.qos_rel)
-                self.pub_score_mask_mono8 = self.create_publisher(Image, "score_mask_debug", self.qos_rel)
+                self.pub_score_mask_32f = self.create_publisher(Image, "score_mask_raw", self.qos_be)
+                self.pub_score_mask_mono8 = self.create_publisher(Image, "score_mask_debug", self.qos_be)
             if self.publish_instance_mask:
-                self.pub_instance_id = self.create_publisher(Image, "instance_id_mask", self.qos_rel)
-
+                self.pub_instance_id = self.create_publisher(Image, "instance_id_mask", self.qos_be)
             self.add_on_set_parameters_callback(self._parameter_update_callback)
 
             self.get_logger().info("Configured.")
@@ -156,8 +158,12 @@ class YoloWrapper(LifecycleNode):
 
     def on_activate(self, state: State) -> TransitionCallbackReturn:
         try:
-            self.sub_rgb = self.create_subscription(Image, self.rgb_topic, self.on_image, self.qos_be)
-            self.sub_prompt = self.create_subscription(SemanticPrompt, self.prompt_topic, self.on_prompt, self.qos_rel)
+            self.sub_rgb = self.create_subscription(
+                Image, self.rgb_topic, self.on_image, self.qos_be
+            )
+            self.sub_prompt = self.create_subscription(
+                SemanticPrompt, self.prompt_topic, self.on_prompt, self.qos_rel
+            )
             self.get_logger().info(f"Activated. rgb={self.rgb_topic}, prompts={self.prompt_topic}")
             return TransitionCallbackReturn.SUCCESS
         except Exception as e:
@@ -349,10 +355,13 @@ def main():
     rclpy.init()
     node = YoloWrapper()
     try:
-        rclpy.spin(node)
+        executor = MultiThreadedExecutor(num_threads=4)
+        executor.add_node(node)
+        executor.spin()
     except KeyboardInterrupt:
         pass
     finally:
+        executor.shutdown()
         node.destroy_node()
         rclpy.shutdown()
 
