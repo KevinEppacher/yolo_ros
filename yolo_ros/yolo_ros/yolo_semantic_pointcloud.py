@@ -82,11 +82,14 @@ class SemanticPointCloud(Node):
 
     def cb(self, score_msg: Image, id_msg: Image, depth_msg: Image, info_msg: CameraInfo):
         # intrinsics
-        self.fx, self.fy, self.cx, self.cy = info_msg.k[0], info_msg.k[4], info_msg.k[2], info_msg.k[5]
+        scale_x = depth_msg.width / info_msg.width
+        scale_y = depth_msg.height / info_msg.height
 
-        self.get_logger().debug(f"cb: score {score_msg.height}x{score_msg.width} {score_msg.encoding}, "
-                                f"id {id_msg.height}x{id_msg.width} {id_msg.encoding}, "
-                                f"depth {depth_msg.height}x{depth_msg.width} {depth_msg.encoding}, "
+        self.fx, self.fy, self.cx, self.cy = info_msg.k[0] * scale_x, info_msg.k[4] * scale_y, info_msg.k[2] * scale_x, info_msg.k[5] * scale_y
+
+        self.get_logger().debug(f"cb: score {score_msg.height}x{score_msg.width} {score_msg.encoding} \n "
+                                f"id {id_msg.height}x{id_msg.width} {id_msg.encoding} \n "
+                                f"depth {depth_msg.height}x{depth_msg.width} {depth_msg.encoding} \n "
                                 f"info {info_msg.width}x{info_msg.height}")
 
         # convert score + id + depth
