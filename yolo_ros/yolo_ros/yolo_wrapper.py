@@ -70,6 +70,8 @@ class YoloWrapper(LifecycleNode):
 
         self._declare_params()
         self._init_param_cache()
+        self._read_params()
+        self.print_params()
 
         self.qos_be = QoSProfile(depth=1, reliability=ReliabilityPolicy.BEST_EFFORT, history=HistoryPolicy.KEEP_LAST)
         self.qos_rel = QoSProfile(depth=5, reliability=ReliabilityPolicy.RELIABLE, history=HistoryPolicy.KEEP_LAST)
@@ -126,6 +128,23 @@ class YoloWrapper(LifecycleNode):
         self.prompt_delim = p("prompt_delimiter").get_parameter_value().string_value or ","
         self.publish_score_mask = bool(p("publish_score_mask").value)
         self.publish_instance_mask = bool(p("publish_instance_mask").value)
+    
+    def print_params(self):
+        self.get_logger().info(f"Parameters:")
+        self.get_logger().info(f" rgb_topic: {self.rgb_topic}")
+        self.get_logger().info(f" backend: {self.backend}")
+        self.get_logger().info(f" weights_name: {self.weights_name}")
+        self.get_logger().info(f" download_url: {self.download_url}")
+        self.get_logger().info(f" prompts: {self.prompts}")
+        self.get_logger().info(f" imgsz: {self.imgsz}")
+        self.get_logger().info(f" conf: {self.conf}")
+        self.get_logger().info(f" iou: {self.iou}")
+        self.get_logger().info(f" publish_overlay: {self.publish_overlay}")
+        self.get_logger().info(f" publish_detections: {self.publish_detections}")
+        self.get_logger().info(f" prompt_topic: {self.prompt_topic}")
+        self.get_logger().info(f" prompt_delimiter: {self.prompt_delim}")
+        self.get_logger().info(f" publish_score_mask: {self.publish_score_mask}")
+        self.get_logger().info(f" publish_instance_mask: {self.publish_instance_mask}")
 
     # ---- lifecycle ----
     def on_configure(self, state: State) -> TransitionCallbackReturn:
