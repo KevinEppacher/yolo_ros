@@ -65,7 +65,7 @@ class SemanticPointCloud(Node):
         self.sub_id    = Subscriber(self, Image, self.id_topic,    qos_profile=qos_be)
         self.sub_depth = Subscriber(self, Image, self.depth_topic, qos_profile=qos_be)
         # camera_info can be reliable but it's small and rarely changes; keep RELIABLE or BE
-        self.sub_info  = Subscriber(self, CameraInfo, self.camera_info_topic, qos_profile=qos_rel)
+        self.sub_info  = Subscriber(self, CameraInfo, self.camera_info_topic, qos_profile=qos_be)
 
         # increase slop a bit so the synchronizer tolerates small clock offsets
         self.sync = ApproximateTimeSynchronizer(
